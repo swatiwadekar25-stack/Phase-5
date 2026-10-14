@@ -1,42 +1,62 @@
 
+import { marked } from "/node_modules/marked/lib/marked.esm.js";
+import DOMPurify from "/node_modules/dompurify/dist/purify.es.mjs";
+
 const questionInput = document.getElementById("question");
 const submitBtn = document.getElementById("submitBtn");
-const answerDiv = document.getElementById("answer");
+const answer = document.getElementById("answer");
+
+// Configure Markdown formatting
+marked.setOptions({
+    gfm: true,
+    breaks: true
+});
 
 submitBtn.addEventListener("click", async () => {
     const question = questionInput.value.trim();
 
-    // Check if question is empty
     if (question === "") {
-        answerDiv.innerText = "Please enter a question.";
+        answer.textContent = "Please enter a question.";
         return;
     }
 
-    // Show loading message
-    answerDiv.innerText = "Thinking... 🤔";
+    answer.textContent = "Thinking... 🤔";
+    submitBtn.disabled = true;
 
     try {
-        // Send question to backend
         const response = await fetch("/api/ask", {
             method: "POST",
-
             headers: {
                 "Content-Type": "application/json"
             },
-
-            body: JSON.stringify({
-                question: question
-            })
+            body: JSON.stringify({ question })
         });
 
-        // Convert backend response to JSON
         const data = await response.json();
 
-        // show answer
-        answerDiv.innerText = data.answer;
+        if (!response.ok) {
+            throw new Error(data.error || "Failed to get an answer.");
+        }
+
+        if (!data.answer) {
+            throw new Error("The server returned an empty answer.");
+        }
+
+        // Convert Markdown into HTML and sanitize it
+        const formattedHTML = await marked.parse(data.answer);
+        answer.innerHTML = DOMPurify.sanitize(formattedHTML);
 
     } catch (error) {
-        console.error(error);
-        answerDiv.innerText = "Something went wrong. Please try again.";
+        console.error("Error:", error);
+        answer.textContent = error.message || "Something went wrong. Please try again.";
+    } finally {
+        submitBtn.disabled = false;
     }
-})
+});
+
+// Allow Enter key to submit the question
+questionInput.addEventListener("keydown", (event) => {
+    if (event.key === "Enter") {
+        submitBtn.click();
+    }
+});
